@@ -49,41 +49,47 @@ export default function BreathVisualizer({ phase, progress, reducedMotion }) {
   const withAlpha = (rgb, a) => rgb.replace('rgb', 'rgba').replace(')', `, ${a})`);
   const easeInOut = (t) => 0.5 - 0.5 * Math.cos(Math.PI * clamp(t, 0, 1));
   const smoothstep = (x) => x * x * (3 - 2 * x);
-  const phaseFullness = (ph, prog) => (ph === 'inhale' ? prog : ph === 'hold' ? 1 : ph === 'exhale' ? 1 - prog : 0);
+  const phaseFullness = (ph, prog) => {
+    if (ph === 'inhale') return prog;
+    if (ph === 'hold') return 1;
+    if (ph === 'exhale') return 1 - prog;
+    return 0;
+  };
 
   const ringStartRef = useRef(-Math.PI / 2);
-  const ringSweepRef = useRef(0.2 * Math.PI);
+  const ringSweepRef = useRef(0);
   const ringStartTRef = useRef(-Math.PI / 2);
-  const ringSweepTRef = useRef(0.2 * Math.PI);
+  const ringSweepTRef = useRef(0);
 
   useEffect(() => {
     targetColorRef.current = phaseColors[phase] || phaseColors.rest;
+    if (phase === 'hold') {
+      targetColorRef.current = phaseColors.hold;
+    } else if (phase === 'exhale') {
+      targetColorRef.current = 'rgb(255, 255, 255)';
+    }
 
-    const minSweep = 0.08 * 2 * Math.PI;
-    const maxSweep = 0.92 * 2 * Math.PI;
-    const top = phase === 'hold';
-    const bottom = phase === 'rest';
-    if (top || bottom) pulseRef.current = 1;
+    const fullSweep = 2 * Math.PI;
 
     if (phase === 'inhale') {
       dirRef.current = 1;
       ringStartTRef.current = -Math.PI / 2;
-      ringSweepTRef.current = lerp(minSweep, maxSweep, easeInOut(progress));
+      ringSweepTRef.current = lerp(0, fullSweep, easeInOut(progress));
       setAudioTargets(0.014, 1400);
     } else if (phase === 'exhale') {
       dirRef.current = -1;
       ringStartTRef.current = -Math.PI / 2;
-      ringSweepTRef.current = lerp(minSweep, maxSweep, 1 - easeInOut(progress));
+      ringSweepTRef.current = lerp(0, fullSweep, 1 - easeInOut(progress));
       setAudioTargets(0.012, 900);
     } else if (phase === 'hold') {
-      const rot = 2 * Math.PI * easeInOut(progress);
+      const rot = fullSweep * easeInOut(progress);
       ringStartTRef.current = -Math.PI / 2 + rot;
-      ringSweepTRef.current = Math.max(ringSweepTRef.current, maxSweep * 0.9);
+      ringSweepTRef.current = fullSweep;
       setAudioTargets(0.005, 700);
     } else if (phase === 'rest') {
-      const rot = 2 * Math.PI * easeInOut(progress);
+      const rot = -fullSweep * easeInOut(progress);
       ringStartTRef.current = -Math.PI / 2 + rot;
-      ringSweepTRef.current = lerp(minSweep, minSweep * 1.25, 0.5 + 0.5 * Math.sin(progress * Math.PI * 2));
+      ringSweepTRef.current = 0;
       setAudioTargets(0.001, 500);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -106,8 +112,8 @@ export default function BreathVisualizer({ phase, progress, reducedMotion }) {
     const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: true });
 
-    const linesCount = Math.min(30, reducedMotion ? 14 : 22);
-    const polygonSides = 7;
+    const linesCount = Math.min(50, reducedMotion ? 25 : 40);
+    const polygonSides = 6;
 
     let last = performance.now();
     const loop = () => {
@@ -124,7 +130,13 @@ export default function BreathVisualizer({ phase, progress, reducedMotion }) {
 
       const fullness = phaseFullness(phase, progress);
       const baseR = Math.min(cx, cy) * 0.44;
-      const scale = reducedMotion ? (0.91 + fullness * 0.09) : (0.8 + fullness * 0.24);
+      let scale = reducedMotion ? (0.91 + fullness * 0.09) : (0.8 + fullness * 0.24);
+
+      if (phase === 'exhale') {
+        scale = lerp(1, 0.05, easeInOut(progress));
+      } else if (phase === 'rest') {
+        scale = 0.05;
+      }
 
       const pu = pulseRef.current; pulseRef.current = Math.max(0, pu - dt * 0.8);
       const pulseAdd = (reducedMotion ? 0.03 : 0.05) * smoothstep(pu);
@@ -151,35 +163,38 @@ export default function BreathVisualizer({ phase, progress, reducedMotion }) {
       ctx.beginPath(); ctx.arc(cx, cy, orbR, 0, Math.PI * 2); ctx.fill();
 
       ctx.globalCompositeOperation = 'lighter';
-      ctx.shadowColor = color; ctx.shadowBlur = reducedMotion ? 0 : orbR * 0.25;
+      ctx.shadowColor = color; 
+      ctx.shadowBlur = reducedMotion ? 0 : orbR * (phase === 'exhale' || phase === 'rest' ? 0.8 : 0.25);
       ctx.beginPath(); ctx.arc(cx, cy, orbR * 0.82, 0, Math.PI * 2);
       ctx.fillStyle = withAlpha(color, 0.05); ctx.fill();
       ctx.restore();
 
       // geometric line-art
-      ctx.save(); ctx.translate(cx, cy);
-      const innerR = orbR * 0.18;
-      const lineW = Math.max(0.6, Math.min(1.8, orbR * 0.006));
-      const rotStep = (Math.PI / 36) * 0.95;
-      for (let i = 0; i < linesCount; i++) {
-        const t = i / (linesCount - 1 || 1);
-        const r = ((1 - t) * innerR) + (t * orbR * 0.98);
-        const a = baseAngle + rotStep * i;
-        const eccY = 1 - (0.05 + 0.04 * Math.sin(tRef.current * 0.45 + i)) * (0.6 + 0.4 * fullness);
-        ctx.save(); ctx.rotate(a); ctx.scale(1, eccY);
-        ctx.beginPath();
-        for (let k2 = 0; k2 < polygonSides; k2++) {
-          const ang = (k2 / polygonSides) * Math.PI * 2;
-          const x = Math.cos(ang) * r, y = Math.sin(ang) * r;
-          if (k2 === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      if (!(phase === 'exhale' && progress > 0.9) && phase !== 'rest') {
+        ctx.save(); ctx.translate(cx, cy);
+        const innerR = orbR * 0.18;
+        const lineW = Math.max(0.8, Math.min(2.2, orbR * 0.008));
+        const rotStep = (Math.PI / 36) * 0.95;
+        for (let i = 0; i < linesCount; i++) {
+          const t = i / (linesCount - 1 || 1);
+          const r = ((1 - t) * innerR) + (t * orbR * 0.98);
+          const a = baseAngle + rotStep * i + Math.sin(tRef.current * 0.2 + i * 0.1) * 0.1;
+          const eccY = 1 - (0.05 + 0.04 * Math.sin(tRef.current * 0.45 + i)) * (0.6 + 0.4 * fullness);
+          ctx.save(); ctx.rotate(a); ctx.scale(1, eccY);
+          ctx.beginPath();
+          for (let k2 = 0; k2 < polygonSides; k2++) {
+            const ang = (k2 / polygonSides) * Math.PI * 2;
+            const x = Math.cos(ang) * r, y = Math.sin(ang) * r;
+            if (k2 === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          const aRamp = ((1 - t) * 0.15) + (t * 0.5);
+          ctx.strokeStyle = withAlpha(color, aRamp);
+          ctx.lineWidth = lineW; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          ctx.stroke(); ctx.restore();
         }
-        ctx.closePath();
-        const aRamp = ((1 - t) * 0.15) + (t * 0.5);
-        ctx.strokeStyle = withAlpha(color, aRamp);
-        ctx.lineWidth = lineW; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.stroke(); ctx.restore();
+        ctx.restore();
       }
-      ctx.restore();
 
       // outer progress ring
       const ringR = baseR * (reducedMotion ? 1.35 : 1.55);
@@ -202,8 +217,11 @@ export default function BreathVisualizer({ phase, progress, reducedMotion }) {
 
       const end = ringStart + ringSweep;
       const ex = cx + Math.cos(end) * ringR, ey = cy + Math.sin(end) * ringR;
-      ctx.beginPath(); ctx.arc(ex, ey, Math.max(1.2, ringWidth * 0.45), 0, Math.PI * 2);
-      ctx.fillStyle = withAlpha(color, pulseColorA); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex, ey, Math.max(1.2, ringWidth * 1.5), 0, Math.PI * 2);
+      ctx.fillStyle = withAlpha(color, pulseColorA);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 20;
+      ctx.fill();
       ctx.restore();
 
       rafRef.current = requestAnimationFrame(loop);

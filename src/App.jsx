@@ -1,21 +1,12 @@
 import { useState, useEffect, useRef, useReducer } from 'react';
-import { Play, Pause, RotateCcw, Settings, X, ChevronRight, Plus } from 'lucide-react';
+import { Play, Pause, RotateCcw, Settings, X, ChevronRight } from 'lucide-react';
 
 import { PROGRAMS, SAFETY_WARNING } from './constants/programs';
 import { breathReducer, createInitialState } from './state/breathReducer';
 import { getPhaseText, formatTime } from './utils/breathUtils';
 import NumberField from './components/NumberField';
 import BreathVisualizer from './components/BreathVisualizer';
-import GeometricBackground from './components/GeometricBackground';
-
-function Screen({ children, bgVariant, bgColor }) {
-  return (
-    <div className="relative min-h-screen bg-black text-white">
-      <GeometricBackground variant={bgVariant} primary={bgColor} opacity={0.65} />
-      <div className="relative z-10">{children}</div>
-    </div>
-  );
-}
+import SphereBackground from './components/SphereBackground';
 
 function App() {
   const [mode, setMode] = useState('select');
@@ -25,10 +16,6 @@ function App() {
   const [customRounds, setCustomRounds] = useState(1);
   const [breathsPerRound, setBreathsPerRound] = useState(10);
   const [restBetweenRounds, setRestBetweenRounds] = useState(30);
-
-  // NEW: global background choice
-  const [bgVariant, setBgVariant] = useState('rose'); // 'rose' | 'lattice' | 'lines'
-  const [bgColor, setBgColor] = useState('rgb(163, 230, 216)'); // teal
 
   const [state, dispatch] = useReducer(breathReducer, createInitialState());
   const rafRef = useRef(null);
@@ -40,11 +27,11 @@ function App() {
   const [, forceUi] = useState(0);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setPrefersReducedMotion(mediaQuery.matches);
-    const handler = (e) => setPrefersReducedMotion(e.matches);
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mq.matches);
+    const h = (e) => setPrefersReducedMotion(e.matches);
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
   }, []);
 
   const getCurrentPattern = () => {
@@ -97,14 +84,14 @@ function App() {
       const ctx = audioContextRef.current;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      const frequencies = { inhale: 440, hold: 523.25, exhale: 349.23, rest: 392 };
-      osc.frequency.value = frequencies[phase] || 440;
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.12);
+      const f = { inhale: 440, hold: 523.25, exhale: 349.23, rest: 392 };
+      osc.frequency.value = f[phase] || 440;
+      osc.type = phase === 'inhale' ? 'sine' : 'triangle';
+      osc.connect(gain); gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.1, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15);
     } catch {}
   };
 
@@ -154,6 +141,7 @@ function App() {
     lastUiUpdateRef.current = lastTickRef.current;
     rafRef.current = requestAnimationFrame(tick);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, state.phase, state.isActive, state.phaseStartTime, state.prepareTime, state.totalPausedMs, selectedProgram, intensity, customPattern, breathsPerRound, customRounds, restBetweenRounds]);
 
   const showPrepare = (program) => { setSelectedProgram(program); setMode('prepare'); };
@@ -177,8 +165,9 @@ function App() {
   // ---------- SCREENS ----------
   if (mode === 'select') {
     return (
-      <Screen bgVariant={bgVariant} bgColor={bgColor}>
-        <div className="min-h-screen flex flex-col items-center justify-center p-6">
+      <div className="relative min-h-screen text-white">
+        <SphereBackground />
+        <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6">
           <div className="w-full max-w-md space-y-8">
             <div className="text-center space-y-2">
               <h1 className="text-5xl font-light tracking-tight">Breathe</h1>
@@ -190,7 +179,7 @@ function App() {
                 <button
                   key={key}
                   onClick={() => showPrepare(key)}
-                  className="w-full bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800/60 rounded-lg p-6 text-left transition-all hover:border-zinc-700/60"
+                  className="w-full rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-6 text-left transition hover:bg-zinc-900/60 hover:border-white/15"
                 >
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="text-xl font-light">{program.name}</h3>
@@ -202,7 +191,7 @@ function App() {
 
               <button
                 onClick={() => setMode('settings')}
-                className="w-full bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800/60 rounded-lg p-6 text-left transition-all hover:border-zinc-700/60"
+                className="w-full rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-6 text-left transition hover:bg-zinc-900/60 hover:border-white/15"
               >
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="text-xl font-light">Custom</h3>
@@ -212,8 +201,7 @@ function App() {
               </button>
             </div>
 
-            {/* Intensity */}
-            <div className="bg-zinc-900/70 border border-zinc-800/60 rounded-lg p-6 space-y-4">
+            <div className="rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-6 space-y-4">
               <div className="flex justify-between items-center">
                 <label className="text-sm text-zinc-200">Intensity</label>
                 <span className="text-sm font-medium">{intensity.toFixed(1)}x</span>
@@ -223,8 +211,8 @@ function App() {
                   <button
                     key={val}
                     onClick={() => setIntensity(val)}
-                    className={`flex-1 py-2 rounded text-sm transition-colors ${
-                      intensity === val ? 'bg-white text-black' : 'bg-zinc-800/80 hover:bg-zinc-700/80'
+                    className={`flex-1 py-2 rounded-lg text-sm transition-colors ${
+                      intensity === val ? 'bg-white text-black' : 'bg-zinc-800/70 hover:bg-zinc-700/80'
                     }`}
                   >
                     {val}×
@@ -238,49 +226,9 @@ function App() {
               />
               <p className="text-xs text-zinc-400">Scales all timing proportionally</p>
             </div>
-
-            {/* NEW: Background Picker */}
-            <div className="bg-zinc-900/70 border border-zinc-800/60 rounded-lg p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-zinc-200">Background</span>
-                <span className="text-xs text-zinc-400 capitalize">{bgVariant}</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {['rose','lattice','lines'].map(v => (
-                  <button
-                    key={v}
-                    onClick={() => setBgVariant(v)}
-                    className={`h-16 rounded-lg border transition ${
-                      bgVariant === v ? 'border-white' : 'border-zinc-700/70 hover:border-zinc-600/70'
-                    } bg-zinc-800/70`}
-                  >
-                    <span className="text-xs capitalize text-zinc-300">{v}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                {[
-                  'rgb(147, 197, 253)', // blue
-                  'rgb(163, 230, 216)', // teal
-                  'rgb(196, 181, 253)', // violet
-                  'rgb(134, 239, 172)', // green
-                  'rgb(244, 244, 245)'  // light
-                ].map(c => (
-                  <button
-                    key={c}
-                    onClick={() => setBgColor(c)}
-                    className={`w-8 h-8 rounded-full border ${
-                      bgColor === c ? 'border-white' : 'border-zinc-700'
-                    }`}
-                    style={{ background: c }}
-                    aria-label={`Choose ${c}`}
-                  />
-                ))}
-              </div>
-            </div>
           </div>
         </div>
-      </Screen>
+      </div>
     );
   }
 
@@ -292,8 +240,9 @@ function App() {
       const estimatedTotal = breathsPerRound * estimatedCycleTime * customRounds + (customRounds - 1) * restBetweenRounds;
 
       return (
-        <Screen bgVariant={bgVariant} bgColor={bgColor}>
-          <div className="min-h-screen flex flex-col items-center justify-center p-6">
+        <div className="relative min-h-screen text-white">
+          <SphereBackground />
+          <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6">
             <div className="w-full max-w-2xl space-y-8">
               <button onClick={() => setMode('settings')} className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2">
                 <ChevronRight className="w-4 h-4 rotate-180" />
@@ -306,7 +255,7 @@ function App() {
                   <p className="text-zinc-300/80">{formatTime(estimatedTotal)} total · {breathsPerRound * customRounds} breaths</p>
                 </div>
 
-                <div className="bg-zinc-900/70 border border-zinc-800/60 rounded-lg p-6">
+                <div className="rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-6">
                   <h2 className="text-sm uppercase tracking-wider text-zinc-400 mb-4">Your Pattern</h2>
                   <div className="space-y-2 text-sm">
                     <Row label="Inhale" value={(customPattern.inhale * intensity).toFixed(1) + 's'} />
@@ -316,13 +265,13 @@ function App() {
                   </div>
                 </div>
 
-                <div className="bg-amber-950/50 border border-amber-900/50 rounded-lg p-4">
+                <div className="bg-amber-950/50 border border-amber-900/50 rounded-2xl p-4">
                   <p className="text-amber-200 text-xs leading-relaxed">{SAFETY_WARNING}</p>
                 </div>
 
                 <button
                   onClick={startSession}
-                  className="w-full bg-white text-black py-4 rounded-lg font-medium hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-white text-black py-4 rounded-xl font-medium hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2"
                 >
                   <Play className="w-5 h-5" />
                   Begin Practice
@@ -330,13 +279,14 @@ function App() {
               </div>
             </div>
           </div>
-        </Screen>
+        </div>
       );
     }
 
     return (
-      <Screen bgVariant={bgVariant} bgColor={bgColor}>
-        <div className="min-h-screen flex flex-col items-center justify-center p-6">
+      <div className="relative min-h-screen text-white">
+        <SphereBackground />
+        <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6">
           <div className="w-full max-w-2xl space-y-8">
             <button onClick={() => setMode('select')} className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2">
               <ChevronRight className="w-4 h-4 rotate-180" />
@@ -349,7 +299,7 @@ function App() {
                 <p className="text-zinc-300/80">{program.duration} minute practice · {intensity}× intensity</p>
               </div>
 
-              <div className="bg-zinc-900/70 border border-zinc-800/60 rounded-lg p-6">
+              <div className="rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-6">
                 <h2 className="text-sm uppercase tracking-wider text-zinc-400 mb-4">Overview</h2>
                 <p className="text-zinc-200 leading-relaxed mb-6">{program.instructions}</p>
 
@@ -369,13 +319,13 @@ function App() {
                 </div>
               </div>
 
-              <div className="bg-amber-950/50 border border-amber-900/50 rounded-lg p-4">
+              <div className="bg-amber-950/50 border border-amber-900/50 rounded-2xl p-4">
                 <p className="text-amber-200 text-xs leading-relaxed">{SAFETY_WARNING}</p>
               </div>
 
               <button
                 onClick={startSession}
-                className="w-full bg-white text-black py-4 rounded-lg font-medium hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-white text-black py-4 rounded-xl font-medium hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2"
               >
                 <Play className="w-5 h-5" />
                 Begin Practice
@@ -383,7 +333,7 @@ function App() {
             </div>
           </div>
         </div>
-      </Screen>
+      </div>
     );
   }
 
@@ -392,8 +342,9 @@ function App() {
     const estimatedTotal = breathsPerRound * estimatedCycleTime * customRounds + (customRounds - 1) * restBetweenRounds;
 
     return (
-      <Screen bgVariant={bgVariant} bgColor={bgColor}>
-        <div className="min-h-screen flex flex-col items-center justify-center p-6">
+      <div className="relative min-h-screen text-white">
+        <SphereBackground />
+        <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6">
           <div className="w-full max-w-md space-y-8">
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-light">Custom Practice</h1>
@@ -402,7 +353,7 @@ function App() {
               </button>
             </div>
 
-            <div className="bg-zinc-900/70 border border-zinc-800/60 rounded-lg p-6 space-y-6">
+            <div className="rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-6 space-y-6">
               <div>
                 <h2 className="text-sm uppercase tracking-wider text-zinc-400 mb-4">Pattern</h2>
                 <div className="space-y-4">
@@ -413,7 +364,7 @@ function App() {
                 </div>
               </div>
 
-              <div className="border-t border-zinc-800/60 pt-6">
+              <div className="border-t border-white/10 pt-6">
                 <h2 className="text-sm uppercase tracking-wider text-zinc-400 mb-4">Structure</h2>
                 <div className="space-y-4">
                   <NumberField label="Rounds" value={customRounds} onChange={setCustomRounds} min={1} max={10} step={1} />
@@ -425,7 +376,7 @@ function App() {
               </div>
             </div>
 
-            <div className="bg-zinc-900/70 border border-zinc-800/60 rounded-lg p-4 text-sm space-y-2">
+            <div className="rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-4 text-sm space-y-2">
               <Row label="Total time" value={formatTime(estimatedTotal)} />
               <Row label="Cycle time" value={formatTime(estimatedCycleTime)} />
               <Row label="Total breaths" value={breathsPerRound * customRounds} />
@@ -433,13 +384,13 @@ function App() {
 
             <button
               onClick={() => showPrepare('custom')}
-              className="w-full bg-white text-black py-4 rounded-lg font-medium hover:bg-zinc-200 transition-colors"
+              className="w-full bg-white text-black py-4 rounded-xl font-medium hover:bg-zinc-200 transition-colors"
             >
               Continue
             </button>
           </div>
         </div>
-      </Screen>
+      </div>
     );
   }
 
@@ -454,13 +405,14 @@ function App() {
     const phaseRemaining = Math.max(0, Math.ceil(phaseDuration - phaseElapsed));
 
     return (
-      <Screen bgVariant={bgVariant} bgColor={bgColor}>
-        <div className="min-h-screen flex flex-col">
+      <div className="relative min-h-screen text-white">
+        <SphereBackground />
+        <div className="relative z-10 min-h-screen flex flex-col">
           <div className="w-full h-0.5 bg-zinc-900/60">
             <div className="h-full bg-white/90 transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
           </div>
 
-          <div className="p-6 flex justify-between items-center border-b border-zinc-900/60">
+          <div className="p-6 flex justify-between items-center border-b border-white/10 backdrop-blur bg-zinc-900/40">
             <div>
               <p className="text-sm text-zinc-300/80">
                 {selectedProgram === 'custom' ? 'Custom' : PROGRAMS[selectedProgram]?.name}
@@ -477,7 +429,7 @@ function App() {
             {getPhaseText(state.phase)}: {phaseRemaining} seconds remaining
           </div>
 
-          <div className="flex-1 flex flex-col items-center justify-center px-6">
+          <div className="flex-1 flex flex-col items-center justify-center p-6">
             {state.phase === 'prepare' ? (
               <div className="text-center">
                 <p className="text-7xl font-light mb-4">{Math.ceil(state.prepareTime / 1000)}</p>
@@ -485,7 +437,7 @@ function App() {
               </div>
             ) : (
               <>
-                <div className="mb-12 w-[340px] h-[340px]">
+                <div className="mb-8 w-[360px] h-[360px] rounded-3xl bg-zinc-950/40 backdrop-blur border border-white/10 shadow-[0_0_60px_rgba(255,255,255,0.05)]">
                   <BreathVisualizer
                     phase={state.phase}
                     progress={(() => {
@@ -513,19 +465,19 @@ function App() {
             )}
           </div>
 
-          <div className="p-6 flex justify-center gap-4 border-t border-zinc-900/60">
+          <div className="p-6 flex justify-center gap-4 border-t border-white/10 backdrop-blur bg-zinc-900/40">
             {state.phase !== 'prepare' && (
               <>
                 <button
                   onClick={() => dispatch({ type: 'TOGGLE_PAUSE', now: performance.now() })}
-                  className="flex items-center justify-center w-14 h-14 bg-zinc-900/70 rounded-full hover:bg-zinc-800/80 transition-colors border border-zinc-800/70"
+                  className="flex items-center justify-center w-14 h-14 bg-zinc-900/60 rounded-full hover:bg-zinc-800/80 transition-colors border border-white/10"
                   aria-label={state.isActive ? 'Pause' : 'Resume'}
                 >
                   {state.isActive ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                 </button>
                 <button
                   onClick={() => { dispatch({ type: 'RESET' }); setMode('select'); }}
-                  className="flex items-center justify-center w-14 h-14 bg-zinc-900/70 rounded-full hover:bg-zinc-800/80 transition-colors border border-zinc-800/70"
+                  className="flex items-center justify-center w-14 h-14 bg-zinc-900/60 rounded-full hover:bg-zinc-800/80 transition-colors border border-white/10"
                   aria-label="Reset"
                 >
                   <RotateCcw className="w-5 h-5" />
@@ -534,7 +486,7 @@ function App() {
             )}
           </div>
         </div>
-      </Screen>
+      </div>
     );
   }
 
