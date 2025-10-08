@@ -1,12 +1,23 @@
+// src/App.jsx
 import { useState, useEffect, useRef, useReducer } from 'react';
+import { motion } from 'motion/react';
 import { Play, Pause, RotateCcw, Settings, X, ChevronRight } from 'lucide-react';
 
 import { PROGRAMS, SAFETY_WARNING } from './constants/programs';
 import { breathReducer, createInitialState } from './state/breathReducer';
-import { getPhaseText, formatTime } from './utils/breathUtils';
+import { getPhaseText, formatTime, phaseGradientTheme, phaseColors, rgbToArr } from './utils/breathUtils';
 import NumberField from './components/NumberField';
 import BreathVisualizer from './components/BreathVisualizer';
-import SphereBackground from './components/SphereBackground';
+import AuroraBackground from './components/AuroraBackground';
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: (i = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: 0.12 + i * 0.06, duration: 0.45, ease: 'easeOut' }
+  })
+};
 
 function App() {
   const [mode, setMode] = useState('select');
@@ -153,55 +164,72 @@ function App() {
     dispatch({ type: 'START' });
     setMode('session');
   };
-  const getPhaseProgress = () => {
-    if (!state.phaseStartTime || state.phase === 'prepare' || state.phase === 'complete') return 0;
-    const pattern = getCurrentPattern();
-    const duration = pattern[state.phase] || 0;
-    if (duration <= 0) return 1;
-    const elapsed = (performance.now() - state.phaseStartTime) / 1000;
-    return Math.min(1, Math.max(0, elapsed / duration));
-  };
 
   // ---------- SCREENS ----------
   if (mode === 'select') {
     return (
-      <div className="relative min-h-screen text-white">
-        <SphereBackground />
+      <div className="relative min-h-screen overflow-hidden text-white">
+        <AuroraBackground reducedMotion={prefersReducedMotion} />
         <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6">
-          <div className="w-full max-w-md space-y-8">
-            <div className="text-center space-y-2">
+          <motion.div
+            className="w-full max-w-md space-y-8"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+          >
+            <motion.div
+              className="text-center space-y-2"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, ease: 'easeOut', delay: 0.1 }}
+            >
               <h1 className="text-5xl font-light tracking-tight">Breathe</h1>
               <p className="text-zinc-300/70 text-sm">Choose your practice</p>
-            </div>
+            </motion.div>
 
-            <div className="space-y-3">
-              {Object.entries(PROGRAMS).map(([key, program]) => (
-                <button
+            <motion.div className="space-y-3" initial="hidden" animate="visible">
+              {Object.entries(PROGRAMS).map(([key, program], index) => (
+                <motion.button
                   key={key}
+                  type="button"
+                  custom={index}
+                  variants={cardVariants}
+                  whileHover={{ scale: prefersReducedMotion ? 1 : 1.02, borderColor: 'rgba(255,255,255,0.22)', boxShadow: '0 18px 46px rgba(59,130,246,0.18)' }}
+                  whileTap={{ scale: prefersReducedMotion ? 1 : 0.97 }}
                   onClick={() => showPrepare(key)}
-                  className="w-full rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-6 text-left transition hover:bg-zinc-900/60 hover:border-white/15"
+                  className="w-full rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-6 text-left transition-colors"
                 >
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="text-xl font-light">{program.name}</h3>
-                    <span className="text-sm text-zinc-400">{program.duration} min</span>
+                    <span className="text-sm text-zinc-300/70">{program.duration} min</span>
                   </div>
                   <p className="text-sm text-zinc-300/80">{program.description}</p>
-                </button>
+                </motion.button>
               ))}
 
-              <button
+              <motion.button
+                type="button"
+                custom={Object.keys(PROGRAMS).length}
+                variants={cardVariants}
+                whileHover={{ scale: prefersReducedMotion ? 1 : 1.02, borderColor: 'rgba(255,255,255,0.22)', boxShadow: '0 18px 46px rgba(59,130,246,0.18)' }}
+                whileTap={{ scale: prefersReducedMotion ? 1 : 0.97 }}
                 onClick={() => setMode('settings')}
-                className="w-full rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-6 text-left transition hover:bg-zinc-900/60 hover:border-white/15"
+                className="w-full rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-6 text-left transition-colors"
               >
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="text-xl font-light">Custom</h3>
-                  <Settings className="w-5 h-5 text-zinc-400" />
+                  <Settings className="w-5 h-5 text-zinc-300/70" />
                 </div>
                 <p className="text-sm text-zinc-300/80">Design your own practice</p>
-              </button>
-            </div>
+              </motion.button>
+            </motion.div>
 
-            <div className="rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-6 space-y-4">
+            <motion.div
+              className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-6 space-y-4"
+              initial={{ opacity: 0, y: 32 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: 'easeOut', delay: 0.2 }}
+            >
               <div className="flex justify-between items-center">
                 <label className="text-sm text-zinc-200">Intensity</label>
                 <span className="text-sm font-medium">{intensity.toFixed(1)}x</span>
@@ -210,9 +238,10 @@ function App() {
                 {[0.5, 1.0, 1.5, 2.0].map(val => (
                   <button
                     key={val}
+                    type="button"
                     onClick={() => setIntensity(val)}
-                    className={`flex-1 py-2 rounded-lg text-sm transition-colors ${
-                      intensity === val ? 'bg-white text-black' : 'bg-zinc-800/70 hover:bg-zinc-700/80'
+                    className={`flex-1 py-2 rounded-lg text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${
+                      intensity === val ? 'bg-white text-black shadow-[0_0_24px_rgba(255,255,255,0.24)]' : 'bg-zinc-800/70 hover:bg-zinc-700/80'
                     }`}
                   >
                     {val}×
@@ -220,13 +249,17 @@ function App() {
                 ))}
               </div>
               <input
-                type="range" min="0.5" max="2" step="0.1" value={intensity}
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={intensity}
                 onChange={(e) => setIntensity(parseFloat(e.target.value))}
-                className="w-full h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+                className="w-full h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
               />
               <p className="text-xs text-zinc-400">Scales all timing proportionally</p>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         </div>
       </div>
     );
@@ -240,22 +273,38 @@ function App() {
       const estimatedTotal = breathsPerRound * estimatedCycleTime * customRounds + (customRounds - 1) * restBetweenRounds;
 
       return (
-        <div className="relative min-h-screen text-white">
-          <SphereBackground />
+        <div className="relative min-h-screen overflow-hidden text-white">
+          <AuroraBackground reducedMotion={prefersReducedMotion} />
           <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6">
-            <div className="w-full max-w-2xl space-y-8">
-              <button onClick={() => setMode('settings')} className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2">
+            <motion.div
+              className="w-full max-w-2xl space-y-8"
+              initial={{ opacity: 0, y: 28 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, ease: 'easeOut' }}
+            >
+              <motion.button
+                type="button"
+                onClick={() => setMode('settings')}
+                className="text-zinc-300/80 hover:text-white transition-colors flex items-center gap-2"
+                whileHover={prefersReducedMotion ? undefined : { x: -6 }}
+                whileTap={prefersReducedMotion ? undefined : { scale: 0.95 }}
+              >
                 <ChevronRight className="w-4 h-4 rotate-180" />
                 Back
-              </button>
+              </motion.button>
 
-              <div className="space-y-6">
-                <div>
-                  <h1 className="text-4xl font-light mb-2">Custom Practice</h1>
+              <motion.div className="space-y-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1, duration: 0.4 }}>
+                <div className="space-y-2">
+                  <h1 className="text-4xl font-light">Custom Practice</h1>
                   <p className="text-zinc-300/80">{formatTime(estimatedTotal)} total · {breathsPerRound * customRounds} breaths</p>
                 </div>
 
-                <div className="rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-6">
+                <motion.div
+                  className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-6"
+                  initial={{ opacity: 0, y: 24 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.14, duration: 0.45, ease: 'easeOut' }}
+                >
                   <h2 className="text-sm uppercase tracking-wider text-zinc-400 mb-4">Your Pattern</h2>
                   <div className="space-y-2 text-sm">
                     <Row label="Inhale" value={(customPattern.inhale * intensity).toFixed(1) + 's'} />
@@ -263,49 +312,79 @@ function App() {
                     <Row label="Exhale" value={(customPattern.exhale * intensity).toFixed(1) + 's'} />
                     {customPattern.rest > 0 && <Row label="Rest" value={(customPattern.rest * intensity).toFixed(1) + 's'} />}
                   </div>
-                </div>
+                </motion.div>
 
-                <div className="bg-amber-950/50 border border-amber-900/50 rounded-2xl p-4">
+                <motion.div
+                  className="bg-amber-950/50 border border-amber-900/50 rounded-2xl p-4"
+                  initial={{ opacity: 0, y: 24 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.18, duration: 0.45, ease: 'easeOut' }}
+                >
                   <p className="text-amber-200 text-xs leading-relaxed">{SAFETY_WARNING}</p>
-                </div>
+                </motion.div>
 
-                <button
+                <motion.button
+                  type="button"
                   onClick={startSession}
-                  className="w-full bg-white text-black py-4 rounded-xl font-medium hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2"
+                  whileHover={prefersReducedMotion ? undefined : { scale: 1.02, boxShadow: '0 20px 40px rgba(255,255,255,0.18)' }}
+                  whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                  className="w-full bg-white text-black py-4 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <Play className="w-5 h-5" />
                   Begin Practice
-                </button>
-              </div>
-            </div>
+                </motion.button>
+              </motion.div>
+            </motion.div>
           </div>
         </div>
       );
     }
 
     return (
-      <div className="relative min-h-screen text-white">
-        <SphereBackground />
+      <div className="relative min-h-screen overflow-hidden text-white">
+        <AuroraBackground reducedMotion={prefersReducedMotion} />
         <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6">
-          <div className="w-full max-w-2xl space-y-8">
-            <button onClick={() => setMode('select')} className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2">
+          <motion.div
+            className="w-full max-w-2xl space-y-8"
+            initial={{ opacity: 0, y: 28 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, ease: 'easeOut' }}
+          >
+            <motion.button
+              type="button"
+              onClick={() => setMode('select')}
+              className="text-zinc-300/80 hover:text-white transition-colors flex items-center gap-2"
+              whileHover={prefersReducedMotion ? undefined : { x: -6 }}
+              whileTap={prefersReducedMotion ? undefined : { scale: 0.95 }}
+            >
               <ChevronRight className="w-4 h-4 rotate-180" />
               Back
-            </button>
+            </motion.button>
 
-            <div className="space-y-6">
-              <div>
-                <h1 className="text-4xl font-light mb-2">{program.name}</h1>
+            <motion.div className="space-y-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1, duration: 0.4 }}>
+              <div className="space-y-2">
+                <h1 className="text-4xl font-light">{program.name}</h1>
                 <p className="text-zinc-300/80">{program.duration} minute practice · {intensity}× intensity</p>
               </div>
 
-              <div className="rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-6">
+              <motion.div
+                className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-6"
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.14, duration: 0.45, ease: 'easeOut' }}
+              >
                 <h2 className="text-sm uppercase tracking-wider text-zinc-400 mb-4">Overview</h2>
                 <p className="text-zinc-200 leading-relaxed mb-6">{program.instructions}</p>
 
                 <div className="space-y-3">
                   {program.sequences.map((seq, idx) => (
-                    <div key={idx} className="flex gap-4 items-start">
+                    <motion.div
+                      key={idx}
+                      className="flex gap-4 items-start"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.18 + idx * 0.05, duration: 0.4, ease: 'easeOut' }}
+                    >
                       <span className="text-zinc-500 text-sm font-mono mt-1">{seq.minutes}m</span>
                       <div className="flex-1">
                         <p className="text-zinc-200 text-sm">{seq.description}</p>
@@ -314,24 +393,32 @@ function App() {
                           {seq.pattern.rest > 0 && ` / ${(seq.pattern.rest * intensity).toFixed(1)}s rest`}
                         </p>
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
-              </div>
+              </motion.div>
 
-              <div className="bg-amber-950/50 border border-amber-900/50 rounded-2xl p-4">
+              <motion.div
+                className="bg-amber-950/50 border border-amber-900/50 rounded-2xl p-4"
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.24, duration: 0.45, ease: 'easeOut' }}
+              >
                 <p className="text-amber-200 text-xs leading-relaxed">{SAFETY_WARNING}</p>
-              </div>
+              </motion.div>
 
-              <button
+              <motion.button
+                type="button"
                 onClick={startSession}
-                className="w-full bg-white text-black py-4 rounded-xl font-medium hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2"
+                whileHover={prefersReducedMotion ? undefined : { scale: 1.02, boxShadow: '0 20px 40px rgba(255,255,255,0.18)' }}
+                whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                className="w-full bg-white text-black py-4 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
               >
                 <Play className="w-5 h-5" />
                 Begin Practice
-              </button>
-            </div>
-          </div>
+              </motion.button>
+            </motion.div>
+          </motion.div>
         </div>
       </div>
     );
@@ -342,18 +429,34 @@ function App() {
     const estimatedTotal = breathsPerRound * estimatedCycleTime * customRounds + (customRounds - 1) * restBetweenRounds;
 
     return (
-      <div className="relative min-h-screen text-white">
-        <SphereBackground />
+      <div className="relative min-h-screen overflow-hidden text-white">
+        <AuroraBackground reducedMotion={prefersReducedMotion} />
         <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6">
-          <div className="w-full max-w-md space-y-8">
+          <motion.div
+            className="w-full max-w-md space-y-8"
+            initial={{ opacity: 0, y: 26 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+          >
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-light">Custom Practice</h1>
-              <button onClick={() => setMode('select')} className="p-2 hover:bg-zinc-900 rounded-full transition-colors">
+              <motion.button
+                type="button"
+                onClick={() => setMode('select')}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                whileHover={prefersReducedMotion ? undefined : { rotate: -10 }}
+                whileTap={prefersReducedMotion ? undefined : { scale: 0.92 }}
+              >
                 <X className="w-6 h-6" />
-              </button>
+              </motion.button>
             </div>
 
-            <div className="rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-6 space-y-6">
+            <motion.div
+              className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-6 space-y-6"
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.08, duration: 0.45, ease: 'easeOut' }}
+            >
               <div>
                 <h2 className="text-sm uppercase tracking-wider text-zinc-400 mb-4">Pattern</h2>
                 <div className="space-y-4">
@@ -374,21 +477,29 @@ function App() {
                   )}
                 </div>
               </div>
-            </div>
+            </motion.div>
 
-            <div className="rounded-2xl bg-zinc-900/50 backdrop-blur border border-white/10 p-4 text-sm space-y-2">
+            <motion.div
+              className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-4 text-sm space-y-2"
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.14, duration: 0.45, ease: 'easeOut' }}
+            >
               <Row label="Total time" value={formatTime(estimatedTotal)} />
               <Row label="Cycle time" value={formatTime(estimatedCycleTime)} />
               <Row label="Total breaths" value={breathsPerRound * customRounds} />
-            </div>
+            </motion.div>
 
-            <button
+            <motion.button
+              type="button"
               onClick={() => showPrepare('custom')}
-              className="w-full bg-white text-black py-4 rounded-xl font-medium hover:bg-zinc-200 transition-colors"
+              whileHover={prefersReducedMotion ? undefined : { scale: 1.02, boxShadow: '0 20px 40px rgba(255,255,255,0.16)' }}
+              whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+              className="w-full bg-white text-black py-4 rounded-xl font-medium transition-colors"
             >
               Continue
-            </button>
-          </div>
+            </motion.button>
+          </motion.div>
         </div>
       </div>
     );
@@ -404,17 +515,44 @@ function App() {
     const phaseDuration = pattern[state.phase] || 0;
     const phaseRemaining = Math.max(0, Math.ceil(phaseDuration - phaseElapsed));
 
+    const phaseProgress = (() => {
+      if (!state.phaseStartTime) return 0;
+      const duration = pattern[state.phase] || 0;
+      if (duration <= 0) return 1;
+      const elapsed = (performance.now() - state.phaseStartTime) / 1000;
+      return Math.min(1, Math.max(0, elapsed / duration));
+    })();
+
+    const paletteTheme = phaseGradientTheme[state.phase];
+    const palette = paletteTheme
+      ? paletteTheme
+      : (() => {
+          const fallback = rgbToArr(phaseColors[state.phase] || 'rgb(180,197,255)');
+          return { primary: fallback, secondary: fallback };
+        })();
+
+    const progressGradient = `linear-gradient(135deg, rgba(${palette.primary[0]},${palette.primary[1]},${palette.primary[2]},0.88), rgba(${palette.secondary[0]},${palette.secondary[1]},${palette.secondary[2]},0.78))`;
+
     return (
-      <div className="relative min-h-screen text-white">
-        <SphereBackground />
-        <div className="relative z-10 min-h-screen flex flex-col">
-          <div className="w-full h-0.5 bg-zinc-900/60">
-            <div className="h-full bg-white/90 transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+      <div className="relative min-h-screen overflow-hidden text-white">
+        <AuroraBackground reducedMotion={prefersReducedMotion} />
+        <div className="relative z-10 min-h-screen flex flex-col bg-gradient-to-b from-black/20 via-black/10 to-transparent">
+          <div className="w-full h-0.5 bg-white/10">
+            <motion.div
+              className="h-full bg-white/90"
+              animate={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.45, ease: 'easeOut' }}
+            />
           </div>
 
-          <div className="p-6 flex justify-between items-center border-b border-white/10 backdrop-blur bg-zinc-900/40">
+          <motion.div
+            className="p-6 flex justify-between items-center border-b border-white/10 backdrop-blur-sm bg-white/5"
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: 'easeOut' }}
+          >
             <div>
-              <p className="text-sm text-zinc-300/80">
+              <p className="text-sm text-zinc-200/90">
                 {selectedProgram === 'custom' ? 'Custom' : PROGRAMS[selectedProgram]?.name}
               </p>
               <p className="text-xs text-zinc-400">{state.breathCount} breaths</p>
@@ -423,7 +561,7 @@ function App() {
               <p className="text-sm font-mono tabular-nums">{formatTime(Math.max(0, sessionElapsed))}</p>
               <p className="text-xs text-zinc-400">of {formatTime(getTotalDuration())}</p>
             </div>
-          </div>
+          </motion.div>
 
           <div role="status" aria-live="polite" className="sr-only">
             {getPhaseText(state.phase)}: {phaseRemaining} seconds remaining
@@ -431,60 +569,86 @@ function App() {
 
           <div className="flex-1 flex flex-col items-center justify-center p-6">
             {state.phase === 'prepare' ? (
-              <div className="text-center">
+              <motion.div
+                className="text-center"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
+              >
                 <p className="text-7xl font-light mb-4">{Math.ceil(state.prepareTime / 1000)}</p>
                 <p className="text-zinc-300/80 text-sm uppercase tracking-wider">Prepare to begin</p>
-              </div>
+              </motion.div>
             ) : (
               <>
-                <div className="mb-8 w-[360px] h-[360px] rounded-3xl bg-zinc-950/40 backdrop-blur border border-white/10 shadow-[0_0_60px_rgba(255,255,255,0.05)]">
+                <motion.div
+                  className="mb-10 w-full max-w-sm"
+                  initial={{ opacity: 0, scale: 0.92 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.45, ease: 'easeOut' }}
+                >
                   <BreathVisualizer
                     phase={state.phase}
-                    progress={(() => {
-                      if (!state.phaseStartTime) return 0;
-                      const duration = pattern[state.phase] || 0;
-                      if (duration <= 0) return 1;
-                      const elapsed = (performance.now() - state.phaseStartTime) / 1000;
-                      return Math.min(1, Math.max(0, elapsed / duration));
-                    })()}
+                    progress={phaseProgress}
                     reducedMotion={prefersReducedMotion}
                   />
-                </div>
+                </motion.div>
 
-                <div className="text-center space-y-4">
-                  <p className="text-xs uppercase tracking-[0.3em] text-zinc-400">
+                <motion.div
+                  className="text-center space-y-4"
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: 'easeOut', delay: 0.1 }}
+                >
+                  <p className="text-xs uppercase tracking-[0.3em] text-zinc-300/80">
                     {getPhaseText(state.phase)}
                   </p>
+                  <div className="mx-auto h-[2px] w-32 overflow-hidden rounded-full bg-white/10">
+                    <motion.div
+                      className="h-full"
+                      style={{ background: progressGradient }}
+                      animate={{ width: `${Math.round(phaseProgress * 100)}%` }}
+                      transition={{ duration: prefersReducedMotion ? 0.2 : 0.35, ease: 'easeOut' }}
+                    />
+                  </div>
                   {state.phase !== 'complete' && state.phase !== 'ready' && (
                     <p className="text-7xl font-light tabular-nums">
                       {phaseRemaining}
                     </p>
                   )}
-                </div>
+                </motion.div>
               </>
             )}
           </div>
 
-          <div className="p-6 flex justify-center gap-4 border-t border-white/10 backdrop-blur bg-zinc-900/40">
+          <motion.div
+            className="p-6 flex justify-center gap-4 border-t border-white/10 backdrop-blur-sm bg-white/5"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: 'easeOut' }}
+          >
             {state.phase !== 'prepare' && (
               <>
-                <button
+                <motion.button
                   onClick={() => dispatch({ type: 'TOGGLE_PAUSE', now: performance.now() })}
-                  className="flex items-center justify-center w-14 h-14 bg-zinc-900/60 rounded-full hover:bg-zinc-800/80 transition-colors border border-white/10"
+                  className="flex items-center justify-center w-14 h-14 bg-black/40 rounded-full border border-white/15 text-white"
                   aria-label={state.isActive ? 'Pause' : 'Resume'}
+                  whileHover={prefersReducedMotion ? undefined : { scale: 1.05, boxShadow: '0 0 30px rgba(255,255,255,0.18)' }}
+                  whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
                 >
                   {state.isActive ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-                </button>
-                <button
+                </motion.button>
+                <motion.button
                   onClick={() => { dispatch({ type: 'RESET' }); setMode('select'); }}
-                  className="flex items-center justify-center w-14 h-14 bg-zinc-900/60 rounded-full hover:bg-zinc-800/80 transition-colors border border-white/10"
+                  className="flex items-center justify-center w-14 h-14 bg-black/40 rounded-full border border-white/15 text-white"
                   aria-label="Reset"
+                  whileHover={prefersReducedMotion ? undefined : { scale: 1.05, boxShadow: '0 0 30px rgba(255,255,255,0.18)' }}
+                  whileTap={prefersReducedMotion ? undefined : { scale: 0.9 }}
                 >
                   <RotateCcw className="w-5 h-5" />
-                </button>
+                </motion.button>
               </>
             )}
-          </div>
+          </motion.div>
         </div>
       </div>
     );

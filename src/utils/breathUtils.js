@@ -1,19 +1,26 @@
 export const phaseColors = {
-  inhale: 'rgb(147, 197, 253)', // light blue
-  hold:   'rgb(196, 181, 253)', // violet
-  exhale: 'rgb(134, 239, 172)', // green
-  rest:   'rgb(161, 161, 170)', // gray
+  inhale: 'rgb(148, 190, 255)',
+  hold:   'rgb(203, 186, 255)',
+  exhale: 'rgb(129, 233, 197)',
+  rest:   'rgb(178, 190, 210)',
   prepare:'rgb(244, 244, 245)',
   complete:'rgb(244, 244, 245)'
+};
+
+export const phaseGradientTheme = {
+  inhale: { primary: [148, 190, 255], secondary: [88, 160, 255] },
+  hold:   { primary: [203, 186, 255], secondary: [155, 134, 255] },
+  exhale: { primary: [129, 233, 197], secondary: [92, 206, 176] },
+  rest:   { primary: [178, 190, 210], secondary: [132, 140, 160] }
 };
 
 export const getPhaseText = (phase) => {
   const texts = {
     prepare: 'Prepare',
-    inhale: 'Breathe In',
+    inhale: 'Inhale',
     hold: 'Hold',
-    exhale: 'Breathe Out',
-    rest: 'Rest',
+    exhale: 'Exhale',
+    rest: 'Hold',
     complete: 'Complete',
     ready: ''
   };
