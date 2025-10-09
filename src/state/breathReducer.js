@@ -56,6 +56,17 @@ export function breathReducer(state, action) {
       return createInitialState();
     case 'UPDATE_PREPARE':
       return { ...state, prepareTime: action.prepareTime };
+    case 'FORCE_PHASE': {
+      const nextState = {
+        ...state,
+        phase: action.phase,
+        phaseStartTime: action.now
+      };
+      if (!state.isActive && state.pauseStartedAt !== null) {
+        nextState.pauseStartedAt = action.now;
+      }
+      return nextState;
+    }
     default:
       return state;
   }

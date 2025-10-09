@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useState, useEffect, useRef, useReducer } from 'react';
+import { useState, useEffect, useRef, useReducer, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { Play, Pause, RotateCcw, Settings, X, ChevronRight } from 'lucide-react';
 
@@ -9,6 +9,7 @@ import { getPhaseText, formatTime, phaseGradientTheme, phaseColors, rgbToArr } f
 import NumberField from './components/NumberField';
 import BreathVisualizer from './components/BreathVisualizer';
 import AuroraBackground from './components/AuroraBackground';
+import ProgramTimeline from './components/ProgramTimeline';
 
 const cardVariants = {
   hidden: { opacity: 0, y: 16 },
@@ -36,6 +37,44 @@ function App() {
   const audioContextRef = useRef(null);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [, forceUi] = useState(0);
+
+  const programSegments = useMemo(() => {
+    if (selectedProgram === 'custom') {
+      const hold = Number.isFinite(customPattern.hold) ? customPattern.hold : 0;
+      const cycleTime = (customPattern.inhale + hold + customPattern.exhale + customPattern.rest) * intensity;
+      const total =
+        breathsPerRound * cycleTime * customRounds +
+        Math.max(0, customRounds - 1) * restBetweenRounds;
+      if (!Number.isFinite(total) || total <= 0) return [];
+      return [
+        {
+          key: 'custom',
+          label: 'Custom flow',
+          durationSec: total,
+          pattern: {
+            inhale: customPattern.inhale * intensity,
+            hold: hold * intensity,
+            exhale: customPattern.exhale * intensity,
+            rest: customPattern.rest * intensity
+          }
+        }
+      ];
+    }
+
+    const program = selectedProgram ? PROGRAMS[selectedProgram] : null;
+    if (!program?.sequences?.length) return [];
+    return program.sequences.map((seq, idx) => ({
+      key: `${selectedProgram}-${idx}`,
+      label: seq.description,
+      durationSec: seq.minutes * 60,
+      pattern: {
+        inhale: seq.pattern.inhale * intensity,
+        hold: seq.pattern.hold * intensity,
+        exhale: seq.pattern.exhale * intensity,
+        rest: seq.pattern.rest * intensity
+      }
+    }));
+  }, [selectedProgram, intensity, customPattern, breathsPerRound, customRounds, restBetweenRounds]);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -533,6 +572,54 @@ function App() {
 
     const progressGradient = `linear-gradient(135deg, rgba(${palette.primary[0]},${palette.primary[1]},${palette.primary[2]},0.88), rgba(${palette.secondary[0]},${palette.secondary[1]},${palette.secondary[2]},0.78))`;
 
+    const totalSegmentDuration = programSegments.reduce((sum, segment) => sum + segment.durationSec, 0);
+    const clampedElapsed = Math.max(0, Math.min(sessionElapsed, totalSegmentDuration || sessionElapsed));
+    let activeSegmentIndex = 0;
+    const segmentProgressValues = programSegments.map(() => 0);
+
+    let accumulated = 0;
+    programSegments.forEach((segment, idx) => {
+      const segDuration = Math.max(segment.durationSec, 0);
+      const start = accumulated;
+      const end = start + segDuration;
+      let fill = 0;
+
+      if (segDuration === 0) {
+        fill = clampedElapsed >= end ? 1 : 0;
+      } else if (clampedElapsed >= end) {
+        fill = 1;
+      } else if (clampedElapsed >= start) {
+        fill = (clampedElapsed - start) / segDuration;
+        activeSegmentIndex = idx;
+      }
+
+      segmentProgressValues[idx] = Math.min(1, Math.max(0, fill));
+      accumulated = end;
+    });
+
+    if (clampedElapsed >= totalSegmentDuration && programSegments.length) {
+      activeSegmentIndex = programSegments.length - 1;
+      segmentProgressValues[activeSegmentIndex] = 1;
+    }
+
+    const currentSegment = programSegments[activeSegmentIndex] || null;
+    const currentPatternLabel = currentSegment ? formatPatternLabel(currentSegment.pattern) : formatPatternLabel(pattern);
+    const currentDescription = currentSegment?.label || getPhaseText(state.phase);
+    const canSkipSegment =
+      state.phase !== 'prepare' && programSegments.length > 1 && activeSegmentIndex < programSegments.length - 1;
+
+    const handleSkipSegment = () => {
+      if (!canSkipSegment || !sessionStartRef.current) return;
+      const now = performance.now();
+      const totalPausedMs = state.totalPausedMs || 0;
+      const nextStart = programSegments
+        .slice(0, activeSegmentIndex + 1)
+        .reduce((sum, segment) => sum + segment.durationSec, 0);
+      sessionStartRef.current = now - nextStart * 1000 - totalPausedMs;
+      dispatch({ type: 'FORCE_PHASE', phase: 'inhale', now });
+      playPhaseSound('inhale');
+    };
+
     return (
       <div className="relative min-h-screen overflow-hidden text-white">
         <AuroraBackground reducedMotion={prefersReducedMotion} />
@@ -580,6 +667,18 @@ function App() {
               </motion.div>
             ) : (
               <>
+                {programSegments.length > 0 && (
+                  <ProgramTimeline
+                    segments={programSegments}
+                    progressValues={segmentProgressValues}
+                    activeIndex={activeSegmentIndex}
+                    currentDescription={currentDescription}
+                    currentPatternLabel={currentPatternLabel}
+                    onSkip={handleSkipSegment}
+                    canSkip={canSkipSegment}
+                    reducedMotion={prefersReducedMotion}
+                  />
+                )}
                 <motion.div
                   className="mb-10 w-full max-w-sm"
                   initial={{ opacity: 0, scale: 0.92 }}
@@ -655,6 +754,21 @@ function App() {
   }
 
   return null;
+}
+
+function formatPatternLabel(pattern) {
+  if (!pattern) return '0-0-0-0';
+  const phases = ['inhale', 'hold', 'exhale', 'rest'];
+  return phases
+    .map((phase) => formatPatternValue(pattern[phase]))
+    .join('-');
+}
+
+function formatPatternValue(value) {
+  if (!Number.isFinite(value)) return '0';
+  const rounded = Math.round(value * 10) / 10;
+  if (Math.abs(rounded) < 0.05) return '0';
+  return Number.isInteger(rounded) ? String(Math.round(rounded)) : rounded.toFixed(1);
 }
 
 function Row({ label, value }) {
